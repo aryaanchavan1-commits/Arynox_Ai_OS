@@ -1,0 +1,25 @@
+[Unit]
+Description=Arynox OS Session
+Documentation=https://docs.arynox.com
+BindsTo=graphical-session.target
+Wants=systemd-logind.service
+After=graphical-session.target systemd-logind.service
+Requires=arynox-compositor.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/arynox/arynox-session
+Restart=on-failure
+RestartSec=3
+Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_CURRENT_DESKTOP=Arynox
+Environment=GDK_BACKEND=wayland
+Environment=QT_QPA_PLATFORM=wayland
+Environment=CLUTTER_BACKEND=wayland
+Environment=SDL_VIDEODRIVER=wayland
+Environment=_JAVA_AWT_WM_NONREPARENTING=1
+Environment=NO_AT_BRIDGE=1
+Environment=ARYNOX_SESSION=1
+
+[Install]
+WantedBy=graphical-session.target

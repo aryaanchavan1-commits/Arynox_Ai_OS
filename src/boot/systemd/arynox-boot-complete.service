@@ -1,0 +1,13 @@
+[Unit]
+Description=Arynox Boot Complete Signal
+Documentation=https://docs.arynox.com
+After=arynox-session.service arynox-compositor.service
+Requires=arynox-session.service arynox-compositor.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/arynox/arynox-boot-complete
+RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical-session.target

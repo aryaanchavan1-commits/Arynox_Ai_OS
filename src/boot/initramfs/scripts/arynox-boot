@@ -1,0 +1,79 @@
+#!/bin/sh
+
+# Arynox OS - Initramfs Boot Script
+# Handles TPM unlock, snapshot detection, and root mounting
+
+PREREQ="udev"
+prereqs() {
+    echo "$PREREQ"
+}
+
+case "$1" in
+    prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+. /scripts/functions
+
+# Parse kernel cmdline for Arynox specific options
+parse_arynox_cmdline() {
+    for x in $(cat /proc/cmdline); do
+        case $x in
+            arynox.recovery=*)
+                ARYNOX_RECOVERY=${x#arynox.recovery=}
+                ;;
+            arynox.snapshot=*)
+                ARYNOX_SNAPSHOT=${x#arynox.snapshot=}
+                ;;
+            arynox.factory-reset)
+                ARYNOX_FACTORY_RESET=1
+                ;;
+        esac
+    done
+}
+
+# Try TPM-based LUKS unlock
+try_tpm_unlock() {
+    if [ -x /usr/lib/arynox/arynox-tpm-unlock ]; then
+        /usr/lib/arynox/arynox-tpm-unlock || return 1
+    fi
+    return 1
+}
+
+# Mount root filesystem with snapshot support
+mount_root() {
+    local rootdev="${ROOT}"
+    local rootopts="subvol=@"
+
+    if [ -n "${ARYNOX_SNAPSHOT}" ]; then
+        rootopts="subvol=@snapshots/${ARYNOX_SNAPSHOT}/snapshot"
+    fi
+
+    # Try TPM unlock first
+    if ! try_tpm_unlock; then
+        # Fallback to LUKS passphrase prompt
+        if ! /scripts/local-top/cryptroot; then
+            panic "Failed to unlock root filesystem"
+        fi
+    fi
+
+    mount -t btrfs -o "${rootopts}" "${rootdev}" /root || {
+        panic "Failed to mount root filesystem"
+    }
+
+    # Mount subvolumes
+    mount -t btrfs -o subvol=@home "${rootdev}" /root/home 2>/dev/null || true
+    mount -t btrfs -o subvol=@var "${rootdev}" /root/var 2>/dev/null || true
+    mount -t btrfs -o subvol=@tmp "${rootdev}" /root/tmp 2>/dev/null || true
+}
+
+parse_arynox_cmdline
+
+# Record boot measurements to TPM PCRs if available
+if command -v tpm2_pcrread >/dev/null 2>&1; then
+    tpm2_pcrread sha256:0 2>/dev/null || true
+fi
+
+mount_root

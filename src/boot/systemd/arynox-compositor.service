@@ -1,0 +1,24 @@
+[Unit]
+Description=Arynox Wayland Compositor
+Documentation=https://docs.arynox.com
+BindsTo=graphical-session.target
+After=graphical-session.target
+Requires=systemd-logind.service
+Wants=arynox-session.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/arynox/arynox-compositor
+Restart=on-failure
+RestartSec=2
+Environment=WAYLAND_DISPLAY=wayland-1
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=ARYNOX_COMPOSITOR=1
+CapabilityBoundingSet=CAP_SYS_TTY_CONFIG CAP_SETUID CAP_SETGID
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+
+[Install]
+WantedBy=graphical-session.target

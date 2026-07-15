@@ -1,0 +1,21 @@
+[Unit]
+Description=Arynox AI Runtime Daemon
+Documentation=https://docs.arynox.com
+After=network.target local-fs.target
+Wants=network.target
+BindsTo=arynox-session.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/arynox/arynox-ai-runtime
+Restart=on-failure
+RestartSec=5
+Environment=ARYNOX_AI_RUNTIME=1
+Environment=PYTHONUNBUFFERED=1
+Environment=OMP_NUM_THREADS=4
+PrivateTmp=yes
+ProtectSystem=full
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,31 @@
+#!/bin/sh
+
+# Arynox OS - Initramfs Base Hook
+# Installs essential Arynox boot components into initramfs
+
+PREREQ="udev"
+prereqs() {
+    echo "$PREREQ"
+}
+
+case "$1" in
+    prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+# Arynox boot utilities
+copy_exec /usr/lib/arynox/arynox-tpm-unlock || true
+copy_exec /usr/lib/arynox/arynox-boot-check || true
+copy_exec /usr/bin/btrfs || true
+
+# TPM2 tools for measured boot
+copy_exec /usr/bin/tpm2_pcrread || true
+copy_exec /usr/bin/tpm2_unseal || true
+
+# Arynox splash data
+mkdir -p "${DESTDIR}/usr/share/arynox/splash"
+cp -r /usr/share/arynox/splash/* "${DESTDIR}/usr/share/arynox/splash/" 2>/dev/null || true
