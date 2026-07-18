@@ -292,7 +292,7 @@ providers:
   ollama:
     api_key: ""
     base_url: "http://127.0.0.1:11434"
-    default_model: "llama3.2"
+    default_model: "qwen2.5"
     temperature: 0.7
     max_tokens: 4096
   lmstudio:

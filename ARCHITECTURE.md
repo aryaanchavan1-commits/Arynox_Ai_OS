@@ -1,273 +1,221 @@
 # Arynox OS Architecture
 
-## Overview
-
-Arynox OS is an AI-native Linux-compatible operating system targeting desktop PCs, laptops, Raspberry Pi, ARM tablets, and future Arynox hardware. It is built with a layered, modular architecture where each component is independently testable and replaceable.
-
-## Design Principles
-
-1. **AI-Native** — AI is a core platform capability, not an application
-2. **Beauty & Polish** — Every pixel is intentional; fluid animations, glass effects, rounded UI
-3. **Performance** — Boot under 10s, GPU-accelerated compositing, lazy resource loading
-4. **Security** — Encrypted storage, sandboxed apps, TPM-backed Secure Boot, encrypted API key storage
-5. **Privacy** — All AI processing user-owned; local-first; user controls data flow
-6. **Modularity** — Every subsystem is independently replaceable via well-defined D-Bus APIs
-7. **Compatibility** — Runs Linux binaries, Wayland-native apps, Flatpak/Snap/AppImage
-
-## System Stack
+## System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                     User Applications                     │
-│  (Flutter, GTK, Qt, Electron, Terminal, Games, etc.)   │
+│                    Arynox OS 0.1.0                       │
 ├─────────────────────────────────────────────────────────┤
-│            Arynox Desktop Environment (Flutter)           │
-│  Shell | Taskbar | Dock | Launcher | Notifications |    │
-│  Control Center | Widgets | Workspaces | Gestures       │
-├─────────────────────────────────────────────────────────┤
-│              Arynox Window Manager (Rust)                 │
-│   Wayland Compositor | Tiling | Snap | Virtual Desktops  │
-├─────────────────────────────────────────────────────────┤
-│           Arynox System Services (Rust/C)                 │
-│  Device Manager | Network | Security | Updates | Cloud  │
-├─────────────────────────────────────────────────────────┤
-│               AI Runtime (Python/Rust)                    │
-│  Hub | Assistant | Copilot | Agent | Providers           │
-├─────────────────────────────────────────────────────────┤
-│           Arynox Core Daemons (Rust)                      │
-│  Session Manager | Policy Kit | Portal | Notifications   │
-├─────────────────────────────────────────────────────────┤
-│               Linux Kernel + systemd                      │
-│  BTRFS | Wayland | PipeWire | NetworkManager | BlueZ    │
-│  Secure Boot | TPM | GPU Drivers | Device Mapper        │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  User Space (Wayland/Weston)                    │   │
+│  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐  │   │
+│  │  │Desktop│ │Files │ │Network│ │Settings│ │ AI  │  │   │
+│  │  │ Shell │ │Manager│ │Manager│ │  App  │ │ Hub │  │   │
+│  │  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘  │   │
+│  │  11 Flutter Apps (Linux desktop)                 │   │
+│  └─────────────────────────────────────────────────┘   │
+│                           │                              │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  System Daemons (Rust)                          │   │
+│  │  ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────┐  │   │
+│  │  │ Session│ │  WM    │ │ Security│ │   AI     │  │   │
+│  │  │ Manager│ │Daemon  │ │ Daemon │ │  Runtime │  │   │
+│  │  └────────┘ └────────┘ └────────┘ └──────────┘  │   │
+│  │  15 Rust daemons with D-Bus IPC                  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                           │                              │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  systemd (PID 1)                                │   │
+│  │  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │   │
+│  │  │NetworkMgr│ │   SSH    │ │  pipewire      │  │   │
+│  │  │  ModemMgr│ │  chrony  │ │  wireplumber   │  │   │
+│  │  └──────────┘ └──────────┘ └────────────────┘  │   │
+│  └─────────────────────────────────────────────────┘   │
+│                           │                              │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Linux Kernel 7.0.0-14-generic (Ubuntu)         │   │
+│  │  ext4, virtio, drm, squashfs, network drivers   │   │
+│  └─────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Technology Choices
+## Rust Daemons (15)
 
-| Layer | Technology | Rationale |
-|-------|-----------|-----------|
-| Kernel | Linux LTS | Mature, hardware support, driver ecosystem |
-| Init | systemd | Industry standard, service management, journald |
-| Display Server | Wayland | Modern, secure, GPU-accelerated |
-| Sound | PipeWire | Low-latency, professional audio, screen capture |
-| Networking | NetworkManager | Universal, VPN, modem support |
-| Bluetooth | BlueZ | Standard Linux Bluetooth stack |
-| Filesystem | BTRFS | Snapshots, compression, subvolumes, checksums |
-| Desktop UI | Flutter | Rich widget library, Material + custom, multi-platform, performant |
-| Window Manager | Rust (smithay) | Memory-safe, fast, direct Wayland protocol access |
-| Core Services | Rust | Memory safety, zero-cost abstractions, async |
-| AI Runtime | Python | Rich ML/AI ecosystem, PyTorch, ONNX, transformers |
-| IPC | D-Bus | Standard Linux IPC, peer-to-peer communication |
-| Database | SQLite | Embedded, reliable, zero-configuration |
-| Package Base | Debian/Ubuntu | Largest software ecosystem for Linux |
+All daemons use D-Bus for IPC via `zbus` crate and `tokio` async runtime.
 
-## Directory Structure
+### Core Daemons
 
-```
-ArynoxOS/
-├── ARCHITECTURE.md          # This file
-├── README.md                # Project overview
-├── docs/                    # All documentation
-│   ├── architecture/        # Architecture decision records
-│   ├── api/                 # Public API specifications
-│   ├── modules/             # Module-specific documentation
-│   └── development/         # Developer guides, coding standards
-├── src/                     # Source code by module
-│   ├── kernel/              # Kernel patches, modules, config
-│   ├── boot/                # Bootloader, initramfs, systemd units
-│   ├── desktop/             # Flutter desktop shell
-│   ├── wm/                  # Wayland compositor (Rust)
-│   ├── settings/            # Settings app (Flutter)
-│   ├── ai/                  # AI subsystem
-│   │   ├── runtime/         # Python AI runtime daemon
-│   │   ├── hub/             # Intelligence Hub UI (Flutter)
-│   │   ├── assistant/       # AI Assistant (Flutter + Python)
-│   │   ├── copilot/         # AI Copilot IPC service
-│   │   └── agent/           # AI Agent service
-│   ├── files/               # File Manager (Flutter + Rust)
-│   ├── devices/             # Device Manager (Rust)
-│   ├── packages/            # Package Manager (Rust)
-│   ├── software/            # Software Center (Flutter)
-│   ├── network/             # Network Manager UI (Flutter)
-│   ├── security/            # Security framework (Rust)
-│   ├── cloud/               # Cloud sync services (Rust)
-│   ├── devtools/            # Developer tools (mixed)
-│   ├── updates/             # OTA update system (Rust)
-│   ├── installer/           # System installer (Flutter)
-│   └── recovery/            # Recovery environment
-├── core/                    # Core Rust libraries and daemons
-├── ai-python/               # Python AI runtime package
-├── shell/                   # System shell scripts
-├── flutter/                 # Shared Flutter widgets, themes, design system
-├── tests/                   # All tests
-│   ├── unit/                # Unit tests per module
-│   ├── integration/         # Integration tests
-│   └── e2e/                 # End-to-end system tests
-├── ci/                      # CI/CD configuration
-├── config/                  # Default system configuration files
-├── resources/               # Static assets
-│   ├── icons/               # System icons
-│   ├── themes/              # Theme definitions
-│   ├── wallpapers/          # Default wallpapers
-│   ├── fonts/               # System fonts
-│   └── sounds/              # System sounds
-└── scripts/                 # Build, dev, and utility scripts
-```
+| # | Crate | Path | Service | Purpose |
+|---|-------|------|---------|---------|
+| 1 | `arynox-session` | `core/arynox-session/` | `arynox-session.service` | Session lifecycle manager. Handles user login sessions, environment setup, seat management. |
+| 2 | `arynox-boot-check` | `core/arynox-boot-check/` | `arynox-boot-complete.service` | Boot health monitor. Validates filesystems, checks hardware, signals boot completion. |
+| 3 | `arynox-tpm` | `core/arynox-tpm/` | — | TPM-based LUKS disk unlock daemon. Provides measured boot attestation. |
 
-## IPC Architecture
+### System Service Daemons
 
-All inter-process communication uses **D-Bus** with well-defined XML introspection interfaces.
+| # | Crate | Path | Service | Purpose |
+|---|-------|------|---------|---------|
+| 4 | `wm` | `src/wm/` | — | Window manager daemon. Manages Wayland compositor state, window rules, multi-monitor. |
+| 5 | `files` | `src/files/` | — | File system daemon. Monitors mounts, provides file search, manages trash/backup. |
+| 6 | `devices` | `src/devices/` | — | Device manager daemon. Hotplug handling, device profiles, power management. |
+| 7 | `packages` | `src/packages/` | — | Package management daemon. APT wrapper, Flatpak integration, update scheduling. |
+| 8 | `network` | `src/network/` | — | Network daemon. VPN management, firewall rules, connection profiles. |
+| 9 | `security` | `src/security/` | — | Security daemon. AppArmor profiles, audit logging, threat detection. |
+| 10 | `cloud` | `src/cloud/` | — | Cloud sync daemon. Backup to remote storage, file sync, restore. |
+| 11 | `updates` | `src/updates/` | — | System update daemon. OS updates, firmware updates, reboot scheduling. |
+| 12 | `installer` | `src/installer/` | — | OS installer daemon. Disk partitioning, system deployment, recovery. |
+| 13 | `recovery` | `src/recovery/` | — | Recovery daemon. System restore, snapshot management, factory reset. |
+| 14 | `devtools` | `src/devtools/` | — | Developer tools daemon. Log viewer, performance monitor, debugger interface. |
+
+### AI Daemon
+
+| # | Crate | Path | Service | Purpose |
+|---|-------|------|---------|---------|
+| 15 | `ai-runtime` | `src/ai/runtime/` | `arynox-ai-runtime.service` | AI runtime orchestrator. Manages Ollama, model lifecycle, inference scheduling. |
+
+### D-Bus IPC Architecture
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  Flutter UI  │────▶│  Core Daemon │────▶│  System Bus  │
-│  (desktop)   │     │  (Rust)      │     │              │
-└─────────────┘     └──────────────┘     └──────┬───────┘
-                                                 │
-                    ┌────────────────────────────┼────────────────────┐
-                    │                            │                    │
-            ┌───────▼──────┐           ┌────────▼───────┐  ┌────────▼───────┐
-            │ AI Runtime   │           │ Device Manager │  │ Network Mgr UI │
-            │ (Python)     │           │ (Rust)         │  │ (Flutter)      │
-            └──────────────┘           └────────────────┘  └────────────────┘
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│ Flutter App │────▶│ D-Bus System │◀────│  Rust Daemon │
+│ (GUI)       │     │    Bus       │     │  (Backend)   │
+└─────────────┘     └──────────────┘     └──────────────┘
+                           │
+                    ┌──────┴──────┐
+                    │ AI Runtime  │
+                    │  (Python)   │
+                    └─────────────┘
 ```
 
-## Data Flow: AI Request
+## Flutter Apps (11)
+
+### Desktop Apps
+
+| # | App | Path | Purpose |
+|---|-----|------|---------|
+| 1 | **Desktop Shell** | `src/desktop/` | Main GUI shell — dock, launcher, control center, notifications |
+| 2 | **File Manager** | `src/files/` | File browser, search, trash, network mounts |
+| 3 | **Network Manager** | `src/network/` | WiFi, Ethernet, VPN configuration |
+| 4 | **Settings** | `src/settings/` | System settings — display, sound, accounts, privacy |
+| 5 | **Software Center** | `src/software/` | App browser, install/uninstall, updates |
+| 6 | **Devices** | `src/devices/` | Hardware manager — Bluetooth, printers, input devices |
+| 7 | **Installer** | `src/installer/` | OS installation wizard, disk setup, user creation |
+
+### Dev Tools
+
+| # | App | Path | Purpose |
+|---|-----|------|---------|
+| 8 | **DevTools** | `src/devtools/` | Developer dashboard — logs, performance, terminal |
+
+### AI Apps
+
+| # | App | Path | Purpose |
+|---|-----|------|---------|
+| 9 | **AI Hub** | `src/ai/hub/` | AI model manager — download, configure, run models |
+| 10 | **AI Assistant** | `src/ai/assistant/` | Conversational AI assistant with vision |
+| 11 | **AI Copilot** | `src/ai/copilot/` | Coding copilot — code generation, review, debugging |
+
+## AI Runtime
 
 ```
-User Input (text/voice/image)
-        │
-        ▼
-  Flutter UI (Assistant/Copilot)
-        │
-        ▼
-  D-Bus → AI Runtime Daemon (Python)
-        │
-        ├──→ Provider Adapter (Groq/OpenAI/Ollama/...)
-        │       │
-        │       ▼
-        │   External API / Local Model
-        │       │
-        │       ▼
-        ├──→ Response Processor
-        │       │
-        │       ▼
-        ├──→ Memory Store (SQLite)
-        │
-        ▼
-  D-Bus → Flutter UI
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  AI Agent    │────▶│   Ollama     │◀────│  AI Models   │
+│  (Port 8080) │     │  (Port 11434)│     │  Qwen2.5 3B  │
+│  REST API    │     │              │     │  Moondream2  │
+│              │     │              │     │  SmolVLM     │
+└──────────────┘     └──────────────┘     └──────────────┘
+       │
+       ├── /chat     → Reasoning (Qwen2.5 3B)
+       ├── /analyze  → Vision (Moondream2)
+       ├── /detect   → Detection (SmolVLM)
+       └── /browse   → Web + Summary
+
+First-boot download: arynox-ai-download.service
+  → Downloads Ollama + models (~8-10 GB total)
+  → Runs once, marks /var/lib/arynox-ai/download-complete
 ```
 
-## Data Flow: Device Hotplug
+## Boot Process
 
 ```
-Kernel udev event
-        │
-        ▼
-  Device Manager (Rust) detects hardware
-        │
-        ├──→ Identifies device (USB vendor/class/etc.)
-        ├──→ Loads driver if needed (kmod)
-        ├──→ Updates D-Bus device tree
-        │
-        ▼
-  Flutter UI receives D-Bus signal
-        │
-        ▼
-  Notification shown | Device appears in manager
+BIOS/UEFI
+   │
+   ▼
+GRUB (serial console, timeout 3s)
+   │
+   ▼
+Linux Kernel 7.0.0-14-generic
+  root=/dev/vda1 console=ttyS0 apparmor=0
+   │
+   ▼
+systemd (PID 1)
+   │
+   ├── sysinit.target — mount fs, udev, modules
+   ├── basic.target   — dbus, systemd-logind
+   ├── NetworkManager — network connectivity
+   ├── multi-user.target
+   │   ├── SSH server
+   │   ├── arynox-boot-complete.service
+   │   ├── arynox-ai-download.service (first boot only)
+   │   └── getty@tty1 (auto-login: arynox)
+   │
+   └── graphical.target
+       └── Weston Wayland Compositor (tty1)
+           └── Desktop Shell + App Launcher
 ```
 
-## Data Flow: File Search with AI
+## Build Process
 
 ```
-User types query in File Manager search bar
-        │
-        ▼
-  File Manager (Flutter) sends query to AI Runtime
-        │
-        ▼
-  AI Runtime interprets natural language → structured query
-        │
-        ▼
-  File Manager executes search (indexed DB + filesystem)
-        │
-        ▼
-  Results displayed with AI relevance ranking
+build.sh  (one-command build)
+   │
+   ├── cargo build --release
+   │   └── 15 Rust daemons → target/release/
+   │
+   ├── flutter build linux --release (×11)
+   │   └── Flutter apps → build/flutter-apps/
+   │
+   ├── scripts/build-full-os.sh
+   │   ├── debootstrap → root filesystem
+   │   ├── apt-get install → packages
+   │   ├── Copy Rust daemons + Flutter apps
+   │   ├── Install AI runtime (Python)
+   │   └── mksquashfs → filesystem.squashfs
+   │
+   └── scripts/build-usb-image.sh
+       ├── Partition + format ext4
+       ├── unsquashfs rootfs
+       ├── Install kernel
+       ├── grub-install + update-grub
+       └── Bootable USB image (6 GB)
 ```
 
-## Security Architecture
+## Directory Layout
 
 ```
-┌──────────────────────────────────────────┐
-│            User Session                   │
-│  ┌──────────┐  ┌──────────┐              │
-│  │ App A    │  │ App B    │  ...          │
-│  │ sandbox  │  │ sandbox  │              │
-│  └────┬─────┘  └────┬─────┘              │
-│       │              │                    │
-│  ┌────▼──────────────▼─────┐              │
-│  │   Arynox Policy Engine  │              │
-│  │  (Permissions, caps)    │              │
-│  └────────────┬────────────┘              │
-│               │                           │
-├───────────────┼───────────────────────────┤
-│               ▼                           │
-│  ┌──────────────────────────┐             │
-│  │  System Security Daemon  │             │
-│  │  Secure Boot | TPM | LSM │            │
-│  └──────────────────────────┘             │
-└───────────────────────────────────────────┘
+/
+├── boot/
+│   ├── vmlinuz-7.0.0-14-generic
+│   └── grub/grub.cfg
+├── etc/
+│   ├── systemd/system/
+│   │   ├── weston.service
+│   │   ├── ollama.service
+│   │   ├── arynox-ai-download.service
+│   │   ├── arynox-ai-runtime.service
+│   │   ├── arynox-boot-complete.service
+│   │   ├── arynox-compositor.service
+│   │   └── arynox-session.service
+│   └── default/grub
+├── usr/
+│   ├── lib/arynox/          — Rust daemon binaries
+│   ├── share/arynox/        — Flutter app bundles
+│   ├── local/bin/
+│   │   ├── arynox-ai-agent  — AI REST API server
+│   │   └── launch-arynox-app
+│   └── local/lib/arynox-ai/ — Model download scripts
+├── home/arynox/
+│   └── .config/weston.ini   — Weston desktop config
+└── var/lib/arynox-ai/
+    └── download-complete    — AI download marker
 ```
-
-## Build System
-
-- **Cargo** for Rust components (workspace with member crates)
-- **Flutter/Dart** for UI components
-- **Meson** for C/C++ components
-- **Poetry** for Python AI runtime
-- **GitHub Actions** for CI/CD
-- Cross-compilation targets: x86_64, aarch64
-
-## Module Dependency Graph
-
-```
-Boot → Desktop Environment → Window Manager
-                                      │
-                    ┌─────────────────┼─────────────────┐
-                    ▼                 ▼                  ▼
-             Settings App     File Manager        Device Manager
-                    │                 │                  │
-                    ▼                 ▼                  ▼
-            Intelligence Hub    Network Manager     Security Framework
-                    │                 │                  │
-                    ▼                 ▼                  ▼
-              AI Runtime ─────▶  AI Assistant ◀─── Cloud Services
-                    │                 │
-                    ▼                 ▼
-              AI Copilot          AI Agent
-                    │
-                    ▼
-            Package Manager → Software Center
-                    │
-                    ▼
-            Developer Tools → OTA Updates → Installer → Recovery
-```
-
-## Versioning
-
-- Semantic Versioning (MAJOR.MINOR.PATCH)
-- Pre-release tags: alpha, beta, rc
-- Cadence: Major every 12 months, Minor every 3 months, Patches as needed
-
-## Development Workflow
-
-1. Each module has an `ARCH.md` in `docs/modules/<module>/`
-2. Each module has `src/<module>/` with its own `Cargo.toml` or `pubspec.yaml`
-3. Tests live in `tests/<type>/<module>/`
-4. CI enforces: `cargo test`, `flutter test`, `cargo clippy`, `dart analyze`
-5. All changes must pass review with architecture alignment check
-
----
-
-*This document is the authoritative source for Arynox OS architecture. All module design must conform to these principles.*

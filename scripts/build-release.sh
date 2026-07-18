@@ -40,7 +40,7 @@ SERVICES:
   - AI Agent: systemd service (auto-downloads models on first boot)
 
 AI MODELS (first boot download):
-  - Ollama + Llama 3.2 (3B): general AI/reasoning/coding
+  - Ollama + Qwen2.5 (3B): general AI/reasoning/coding
   - Moondream2: vision/face/object detection
   - SmolVLM 500M: vision-language tasks
   - Total: ~8-10GB (automatic download on network connect)
