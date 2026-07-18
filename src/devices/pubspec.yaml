@@ -1,5 +1,5 @@
 name: arynox_device_manager
-description: Arynox OS Device Manager - Real-time device detection and management
+description: Arynox OS Device Manager
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,10 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  dbus: ^0.7.10
-  provider: ^6.1.2
-  flutter_glassmorphism: ^0.1.1
-  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:

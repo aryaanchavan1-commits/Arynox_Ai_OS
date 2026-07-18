@@ -9,9 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  dbus: ^0.7.8
-  http: ^1.1.0
-  google_fonts: ^6.1.0
 
 dev_dependencies:
   flutter_test:

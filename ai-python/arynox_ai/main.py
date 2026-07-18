@@ -30,24 +30,24 @@ class AIRuntimeInterface(ServiceInterface):
         self.runtime = runtime
 
     @method()
-    async def Chat(self, provider: str, model: str, messages: str, stream: bool) -> str:
+    async def Chat(self, provider: 's', model: 's', messages: 's', stream: 'b') -> 's':
         result = await self.runtime.chat(provider, model, json.loads(messages), stream)
         return json.dumps(result)
 
     @method()
-    async def GetProviders(self) -> str:
+    async def GetProviders(self) -> 's':
         return json.dumps(self.runtime.get_provider_status())
 
     @method()
-    async def GetMemory(self, limit: int = 50) -> str:
+    async def GetMemory(self, limit: 'i' = 50) -> 's':
         return json.dumps(await self.runtime.get_memory(limit))
 
     @method()
-    async def ClearMemory(self) -> None:
+    async def ClearMemory(self):
         await self.runtime.clear_memory()
 
     @method()
-    async def TestConnection(self, provider: str) -> str:
+    async def TestConnection(self, provider: 's') -> 's':
         result = await self.runtime.test_connection(provider)
         return json.dumps({"success": result})
 

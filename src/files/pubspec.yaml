@@ -1,5 +1,5 @@
 name: arynox_files
-description: Arynox OS File Manager - Flutter Frontend
+description: Arynox OS File Manager
 publish_to: 'none'
 version: 0.1.0
 
@@ -9,42 +9,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_riverpod: ^2.4.9
-  riverpod_annotation: ^2.3.3
-  file_picker: ^6.1.1
-  path_provider: ^2.1.1
-  collection: ^1.18.0
-  animations: ^2.0.8
-  flutter_animate: ^4.3.0
-  path: ^1.8.3
-  intl: ^0.19.0
-  uuid: ^4.2.1
-  provider: ^6.1.1
-  shared_preferences: ^2.2.2
-  url_launcher: ^6.2.1
-  mime: ^1.0.5
-  image_picker: ^1.0.7
-  video_player: ^2.8.2
-  audioplayers: ^5.2.1
-  open_file: ^3.3.2
-  percent_indicator: ^4.2.3
-  flutter_svg: ^2.0.9
-  shimmer: ^3.0.0
-  sliding_up_panel: ^2.8.3
-  flutter_acrylic: ^1.1.4
-  window_manager: ^0.3.7
-  filesize: ^2.0.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
-  build_runner: ^2.4.7
-  riverpod_generator: ^2.3.9
 
 flutter:
   uses-material-design: true
-  fonts:
-    - family: ArynoxIcons
-      fonts:
-        - asset: assets/fonts/ArynoxIcons.ttf

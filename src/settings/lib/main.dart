@@ -1,21 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'providers/settings_providers.dart';
-import 'pages/settings_home.dart';
-import 'pages/appearance_page.dart';
-import 'pages/ai_settings_page.dart';
-import 'pages/security_page.dart';
-import 'pages/network_page.dart';
-import 'pages/display_page.dart';
-import 'pages/system_page.dart';
-import 'pages/privacy_page.dart';
 
 void main() {
-  runApp(
-    const ProviderScope(
-      child: ArynoxSettingsApp(),
-    ),
-  );
+  runApp(const ArynoxSettingsApp());
 }
 
 class ArynoxSettingsApp extends StatelessWidget {
@@ -24,189 +10,124 @@ class ArynoxSettingsApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Settings',
+      title: 'Arynox Settings',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF6C5CE7),
         brightness: Brightness.dark,
+        primarySwatch: Colors.indigo,
+        scaffoldBackgroundColor: const Color(0xFF0F1023),
+        useMaterial3: true,
       ),
-      home: const SettingsShell(),
+      home: const SettingsPage(),
     );
   }
 }
 
-class SettingsShell extends ConsumerWidget {
-  const SettingsShell({super.key});
+class SettingsPage extends StatefulWidget {
+  const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final currentPage = ref.watch(currentSettingsPageProvider);
-
-    return Scaffold(
-      body: Row(
-        children: [
-          // Sidebar
-          Container(
-            width: 260,
-            color: const Color(0xFF1A1B2E),
-            child: Column(
-              children: [
-                const SizedBox(height: 48),
-                const Text(
-                  'Settings',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    children: [
-                      _SettingsNavItem(
-                        icon: Icons.palette_outlined,
-                        label: 'Appearance',
-                        selected: currentPage == 'appearance',
-                        onTap: () => ref.read(currentSettingsPageProvider.notifier).state = 'appearance',
-                      ),
-                      _SettingsNavItem(
-                        icon: Icons.display_settings_outlined,
-                        label: 'Display',
-                        selected: currentPage == 'display',
-                        onTap: () => ref.read(currentSettingsPageProvider.notifier).state = 'display',
-                      ),
-                      _SettingsNavItem(
-                        icon: Icons.wifi_outlined,
-                        label: 'Network',
-                        selected: currentPage == 'network',
-                        onTap: () => ref.read(currentSettingsPageProvider.notifier).state = 'network',
-                      ),
-                      _SettingsNavItem(
-                        icon: Icons.auto_awesome,
-                        label: 'AI',
-                        selected: currentPage == 'ai',
-                        onTap: () => ref.read(currentSettingsPageProvider.notifier).state = 'ai',
-                      ),
-                      _SettingsNavItem(
-                        icon: Icons.lock_outlined,
-                        label: 'Security',
-                        selected: currentPage == 'security',
-                        onTap: () => ref.read(currentSettingsPageProvider.notifier).state = 'security',
-                      ),
-                      _SettingsNavItem(
-                        icon: Icons.visibility_outlined,
-                        label: 'Privacy',
-                        selected: currentPage == 'privacy',
-                        onTap: () => ref.read(currentSettingsPageProvider.notifier).state = 'privacy',
-                      ),
-                      _SettingsNavItem(
-                        icon: Icons.settings_outlined,
-                        label: 'System',
-                        selected: currentPage == 'system',
-                        onTap: () => ref.read(currentSettingsPageProvider.notifier).state = 'system',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Content
-          Expanded(
-            child: Container(
-              color: const Color(0xFF0F1023),
-              child: _buildPage(currentPage),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPage(String page) {
-    switch (page) {
-      case 'appearance':
-        return const AppearancePage();
-      case 'display':
-        return const DisplayPage();
-      case 'network':
-        return const NetworkPage();
-      case 'ai':
-        return const AiSettingsPage();
-      case 'security':
-        return const SecurityPage();
-      case 'privacy':
-        return const PrivacyPage();
-      case 'system':
-        return const SystemPage();
-      default:
-        return const SettingsHomePage();
-    }
-  }
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsNavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+class _SettingsPageState extends State<SettingsPage> {
+  int _selectedIndex = 0;
 
-  const _SettingsNavItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
+  static const _sections = [
+    _SettingsSection('Appearance', Icons.palette, [
+      _Setting('Theme', 'Dark', Icons.dark_mode),
+      _Setting('Accent Color', 'Indigo', Icons.color_lens),
+      _Setting('Font Size', 'Medium', Icons.text_fields),
+    ]),
+    _SettingsSection('System', Icons.settings, [
+      _Setting('Language', 'English', Icons.language),
+      _Setting('Date & Time', 'UTC', Icons.schedule),
+      _Setting('Region', 'US', Icons.public),
+    ]),
+    _SettingsSection('Display', Icons.monitor, [
+      _Setting('Resolution', '1920x1080', Icons.display_settings),
+      _Setting('Refresh Rate', '60 Hz', Icons.speed),
+      _Setting('Brightness', '75%', Icons.brightness_medium),
+    ]),
+    _SettingsSection('Network', Icons.wifi, [
+      _Setting('WiFi', 'Connected', Icons.wifi),
+      _Setting('Bluetooth', 'Off', Icons.bluetooth),
+      _Setting('VPN', 'Disconnected', Icons.vpn_lock),
+    ]),
+    _SettingsSection('Security', Icons.security, [
+      _Setting('Screen Lock', 'Enabled', Icons.lock),
+      _Setting('Firewall', 'Active', Icons.shield),
+      _Setting('Privacy', 'Standard', Icons.privacy_tip),
+    ]),
+    _SettingsSection('AI', Icons.smart_toy, [
+      _Setting('AI Assistant', 'Enabled', Icons.chat),
+      _Setting('Providers', 'OpenAI', Icons.cloud),
+      _Setting('Voice', 'Disabled', Icons.mic),
+    ]),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: selected
-                  ? const Color(0xFF6C5CE7).withValues(alpha: 0.2)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
-              border: selected
-                  ? Border.all(
-                      color: const Color(0xFF6C5CE7).withValues(alpha: 0.3),
-                    )
-                  : null,
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 20,
-                  color: selected
-                      ? const Color(0xFFA29BFE)
-                      : Colors.white54,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: selected ? Colors.white : Colors.white70,
-                    fontWeight: selected ? FontWeight.w500 : FontWeight.normal,
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Settings'),
+        centerTitle: false,
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _sections.length,
+        itemBuilder: (ctx, i) {
+          final section = _sections[i];
+          return Card(
+            color: const Color(0xFF1A1B2E),
+            margin: const EdgeInsets.only(bottom: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(section.icon, color: Colors.indigo, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        section.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  const Divider(color: Color(0xFF2A2B42)),
+                  ...section.items.map((item) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(item.icon, color: Colors.white54, size: 20),
+                    title: Text(item.name, style: const TextStyle(color: Colors.white)),
+                    trailing: Text(item.value, style: const TextStyle(color: Colors.white54)),
+                  )),
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
+}
+
+class _SettingsSection {
+  final String title;
+  final IconData icon;
+  final List<_Setting> items;
+  const _SettingsSection(this.title, this.icon, this.items);
+}
+
+class _Setting {
+  final String name;
+  final String value;
+  final IconData icon;
+  const _Setting(this.name, this.value, this.icon);
 }
