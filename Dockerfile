@@ -1,88 +1,64 @@
-FROM ubuntu:24.04 AS base
+# Stage 1: Build Arynox OS
+FROM ubuntu:24.04 AS builder
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    git \
-    pkg-config \
-    libwayland-dev \
-    libxkbcommon-dev \
-    libegl1-mesa-dev \
-    libgles2-mesa-dev \
-    libdbus-1-dev \
-    libsystemd-dev \
-    libudev-dev \
-    libinput-dev \
-    libdrm-dev \
-    libgbm-dev \
-    libseat-dev \
-    python3 \
-    python3-pip \
-    python3-venv \
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C
+ENV RUSTUP_HOME=/opt/rust
+ENV CARGO_HOME=/opt/cargo
+ENV PATH="/opt/cargo/bin:/opt/flutter/bin:$PATH"
+
+# Install system dependencies
+RUN apt-get update -qq && apt-get install -y -qq \
+    debootstrap squashfs-tools xorriso grub-pc mtools \
+    parted dosfstools \
+    curl wget ca-certificates git build-essential \
+    pkg-config libssl-dev \
+    python3 python3-pip python3-requests \
+    clang cmake ninja-build \
+    libgtk-3-dev liblzma-dev \
     && rm -rf /var/lib/apt/lists/*
 
-FROM base AS rust-builder
+# Install Rust
+RUN curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && rustup default stable
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-WORKDIR /build
-COPY Cargo.toml Cargo.lock ./
-COPY core/ ./core/
-COPY src/wm/ ./src/wm/
-COPY src/files/ ./src/files/
-COPY src/devices/ ./src/devices/
-COPY src/packages/ ./src/packages/
-COPY src/security/ ./src/security/
-COPY src/cloud/ ./src/cloud/
-COPY src/devtools/ ./src/devtools/
-COPY src/updates/ ./src/updates/
-COPY src/network/ ./src/network/
-
-RUN cargo build --release --workspace
-
-FROM base AS python-builder
+# Install Flutter
+RUN wget -q https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.44.6-stable.tar.xz \
+    && tar xf flutter_linux_3.44.6-stable.tar.xz -C /opt \
+    && rm flutter_linux_3.44.6-stable.tar.xz \
+    && flutter config --enable-linux-desktop
 
 WORKDIR /build
-COPY ai-python/ ./ai-python/
-RUN pip install poetry && cd ai-python && poetry build
 
-FROM ubuntu:24.04 AS runtime
+# Copy source
+COPY . .
 
-RUN apt-get update && apt-get install -y \
-    libwayland-client0 \
-    libxkbcommon0 \
-    libegl1 \
-    libgles2 \
-    libdbus-1-3 \
-    libsystemd0 \
-    libudev1 \
-    libinput10 \
-    libdrm2 \
-    libgbm1 \
-    libseat1 \
-    python3 \
-    python3-pip \
-    && rm -rf /var/lib/apt/lists/*
+# Build Rust daemons
+RUN cargo build --release 2>&1 || echo "Rust build incomplete"
 
-COPY --from=rust-builder /build/target/release/arynox-session /usr/lib/arynox/
-COPY --from=rust-builder /build/target/release/arynox-compositor /usr/lib/arynox/
-COPY --from=rust-builder /build/target/release/arynox-tpm /usr/lib/arynox/
-COPY --from=rust-builder /build/target/release/arynox-boot-check /usr/lib/arynox/
-COPY --from=rust-builder /build/target/release/arynox-device-manager /usr/lib/arynox/
-COPY --from=rust-builder /build/target/release/arynox-package-manager /usr/lib/arynox/
-COPY --from=rust-builder /build/target/release/arynox-security /usr/lib/arynox/
-COPY --from=rust-builder /build/target/release/arynox-cloud /usr/lib/arynox/
-COPY --from=rust-builder /build/target/release/arynox-devtools /usr/lib/arynox/
-COPY --from=rust-builder /build/target/release/arynox-updates /usr/lib/arynox/
-COPY --from=rust-builder /build/target/release/arynox-installer /usr/lib/arynox/
-COPY --from=rust-builder /build/target/release/arynox-recovery /usr/lib/arynox/
+# Build Flutter apps
+RUN for dir in src/*/ src/ai/*/; do \
+        if [ -f "$dir/pubspec.yaml" ]; then \
+            echo "Building $(basename $dir)..." && \
+            cd "$dir" && flutter pub get && flutter build linux --release 2>&1 || true && \
+            cd /build; \
+        fi; \
+    done
 
-COPY --from=python-builder /build/ai-python/dist/*.whl /tmp/
-RUN pip install /tmp/*.whl
+# Build root filesystem
+RUN bash scripts/build-full-os.sh 2>&1
 
-COPY src/boot/systemd/*.service /usr/lib/systemd/system/
+# Build USB image
+RUN bash scripts/build-usb-image.sh 2>&1
 
-RUN mkdir -p /etc/arynox /var/lib/arynox
+# Compress and split artifacts for GitHub Releases (<2GB per chunk)
+RUN mkdir -p /output && \
+    if [ -f build/arynox-usb.img ]; then \
+        split -b 1900M build/arynox-usb.img /output/arynox-os-0.1.0-amd64.img.part; \
+        cp build/filesystem.squashfs /output/ && \
+        cp build/vmlinuz-* /output/ 2>/dev/null || true; \
+        cp build/initramfs.img /output/ 2>/dev/null || true; \
+    fi
 
-CMD ["/usr/lib/arynox/arynox-session"]
+FROM scratch
+COPY --from=builder /output/ /

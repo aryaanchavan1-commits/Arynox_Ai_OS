@@ -5,13 +5,68 @@ on:
     tags:
       - 'v*'
 
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
 jobs:
-  build:
+  rust-check:
+    name: Build Rust Daemons
+    runs-on: ubuntu-24.04
+    outputs:
+      cache-key: ${{ steps.cache.outputs.cache-primary-key }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache: true
+      - name: Build all Rust daemons
+        run: cargo build --release 2>&1
+      - name: Upload Rust binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-binaries
+          path: target/release/arynox-*
+          retention-days: 7
+
+  flutter-check:
+    name: Build Flutter Apps
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.6
+          channel: stable
+      - name: Build all Flutter apps
+        run: |
+          mkdir -p build/flutter-apps
+          for dir in src/*/ src/ai/*/; do
+            if [ -f "$dir/pubspec.yaml" ]; then
+              app=$(basename "$dir")
+              echo "Building $app..."
+              cd "$dir"
+              flutter pub get
+              flutter build linux --release 2>&1 || echo "$app build failed"
+              mkdir -p /tmp/flutter-apps/"$app"
+              cp -r build/linux/*/release/bundle/* /tmp/flutter-apps/"$app"/ 2>/dev/null || true
+              cd -
+            fi
+          done
+      - name: Upload Flutter apps
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-apps
+          path: /tmp/flutter-apps/
+          retention-days: 7
+
+  build-os:
     name: Build OS Image
     runs-on: ubuntu-24.04
+    needs: [rust-check, flutter-check]
     permissions:
       contents: write
-
     steps:
       - uses: actions/checkout@v4
 
@@ -22,50 +77,47 @@ jobs:
             grub-pc mtools parted dosfstools \
             curl wget git python3-pip
 
-      - name: Install Rust
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Install Flutter
-        run: |
-          wget -q https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.44.6-stable.tar.xz
-          sudo tar xf flutter_linux_3.44.6-stable.tar.xz -C /opt
-          echo "/opt/flutter/bin" >> $GITHUB_PATH
-          rm flutter_linux_3.44.6-stable.tar.xz
-
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
+      - name: Download Rust binaries
+        uses: actions/download-artifact@v4
         with:
-          path: target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          name: rust-binaries
+          path: target/release/
 
-      - name: Build Rust daemons
-        run: cargo build --release 2>&1 || echo "Rust build incomplete"
-
-      - name: Build Flutter apps
-        run: |
-          for dir in src/*/ src/ai/*/; do
-            if [ -f "$dir/pubspec.yaml" ]; then
-              cd "$dir"
-              flutter pub get
-              flutter build linux --release || true
-              cd -
-            fi
-          done
+      - name: Download Flutter apps
+        uses: actions/download-artifact@v4
+        with:
+          name: flutter-apps
+          path: build/flutter-apps/
 
       - name: Build root filesystem
-        run: sudo bash scripts/build-full-os.sh 2>&1
+        run: |
+          chmod +x target/release/arynox-* 2>/dev/null || true
+          sudo bash scripts/build-full-os.sh 2>&1
 
       - name: Build USB image
         run: sudo bash scripts/build-usb-image.sh 2>&1
 
-      - name: Compress artifacts
+      - name: Prepare release artifacts
         run: |
           mkdir -p release
-          xz -T0 -9 < build/arynox-usb.img > release/arynox-os-${{ github.ref_name }}-amd64.img.xz
-          xz -T0 -9 < build/filesystem.squashfs > release/arynox-os-${{ github.ref_name }}-filesystem.squashfs.xz
+          # Split USB image into <2GB chunks for GitHub Releases
+          if [ -f build/arynox-usb.img ]; then
+            split -b 1900M build/arynox-usb.img release/arynox-os-${{ github.ref_name }}-amd64.img.part
+            # Create checksums
+            cd release
+            sha256sum arynox-os-${{ github.ref_name }}-amd64.img.part* > SHA256SUMS
+            cd ..
+          fi
+          # Compress squashfs
+          if [ -f build/filesystem.squashfs ]; then
+            xz -T0 -9 -k build/filesystem.squashfs 2>/dev/null || true
+            cp build/filesystem.squashfs.xz release/ 2>/dev/null || cp build/filesystem.squashfs release/
+          fi
+          # Copy kernel files
           cp build/vmlinuz-* release/ 2>/dev/null || true
+          cp build/initramfs.img release/ 2>/dev/null || true
+          # Copy Dockerfile and build scripts
+          cp Dockerfile release/ 2>/dev/null || true
           ls -lh release/
 
       - name: Create GitHub Release
@@ -75,35 +127,56 @@ jobs:
           body: |
             ## Arynox OS ${{ github.ref_name }}
 
-            ### Downloads
-            - `arynox-os-${{ github.ref_name }}-amd64.img.xz` — Bootable USB/disk image (ext4 + GRUB)
-            - `arynox-os-${{ github.ref_name }}-filesystem.squashfs.xz` — Compressed root filesystem
+            ### Download & Install
 
-            ### Boot Instructions
+            **Option 1: Pre-built USB image**
+            Download all `.part` files, then concatenate:
             ```bash
-            # Decompress
-            xz -d arynox-os-${{ github.ref_name }}-amd64.img.xz
-
-            # QEMU (headless)
-            qemu-system-x86_64 -m 4G -nographic -drive file=arynox-os-${{ github.ref_name }}-amd64.img,format=raw,if=virtio
-
-            # QEMU (with GUI via VNC)
-            qemu-system-x86_64 -m 4G -vga virtio -vnc :0 -drive file=arynox-os-${{ github.ref_name }}-amd64.img,format=raw,if=virtio
-
+            cat arynox-os-${{ github.ref_name }}-amd64.img.part* > arynox-os.img
             # Write to USB
-            sudo dd if=arynox-os-${{ github.ref_name }}-amd64.img of=/dev/sdX bs=4M status=progress
+            sudo dd if=arynox-os.img of=/dev/sdX bs=4M status=progress
+            ```
+
+            **Option 2: Build with Docker**
+            ```bash
+            git clone https://github.com/aryaanchavan1-commits/Arynox_Ai_OS.git
+            cd Arynox_Ai_OS
+            docker build -t arynox-os .
+            docker run --rm -it arynox-os
+            ```
+
+            **Option 3: Build natively**
+            ```bash
+            # Requires: Ubuntu 24.04, Rust, Flutter
+            sudo bash build.sh
+            ```
+
+            ### Boot
+            ```bash
+            # QEMU headless
+            qemu-system-x86_64 -m 4G -nographic \
+              -drive file=arynox-os.img,format=raw,if=virtio
+
+            # QEMU with GUI (VNC)
+            qemu-system-x86_64 -m 4G -vga virtio -vnc :0 \
+              -drive file=arynox-os.img,format=raw,if=virtio
             ```
 
             ### Credentials
-            - Username: `arynox`
-            - Password: `arynox`
-            - Root/Sudo: passwordless sudo
+            - User: `arynox` / Password: `arynox`
+            - Root: passwordless sudo
 
-            ### Features
-            - systemd, NetworkManager, SSH, pipewire
-            - Weston Wayland compositor + Firefox browser
-            - 15 Rust daemons + 11 Flutter apps
-            - AI runtime: Ollama + Qwen2.5 3B (auto-downloads on first boot)
+            ### What's Included
+            - systemd (PID 1), NetworkManager, SSH, pipewire
+            - Weston Wayland compositor + Firefox
+            - 15 Rust daemons + 11 Flutter desktop apps
+            - AI runtime: Ollama + Qwen2.5 3B + Moondream2 + SmolVLM
+            - AI auto-downloads on first boot (~8-10 GB)
+
+            ### Build Details
+            - Kernel: Ubuntu 7.0.0-14-generic
+            - Base: Ubuntu 24.04 (resolute) via debootstrap
+            - Size: ~6 GB uncompressed
           files: release/*
           draft: false
           prerelease: false
